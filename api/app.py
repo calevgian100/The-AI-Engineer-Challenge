@@ -12,6 +12,46 @@ from typing import Optional
 # Initialize FastAPI application with a title
 app = FastAPI(title="OpenAI Chat API")
 
+# Add CORS middleware to allow cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+# Load API key from env.yaml file
+def load_api_key():
+    try:
+        env_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'env.yaml')
+        print(f"Looking for env.yaml at: {env_file_path}")
+        
+        with open(env_file_path, 'r') as file:
+            content = file.read()
+            print(f"File content (first 10 chars): {content[:10]}...")
+            
+            # Simple parsing: look for line starting with 'openai_api_key:'
+            for line in content.splitlines():
+                if line.strip().startswith('openai_api_key:'):
+                    # Extract the API key value (remove 'openai_api_key:' and strip quotes)
+                    api_key = line.split(':', 1)[1].strip()
+                    # Remove surrounding quotes if present
+                    api_key = api_key.strip('\'"')
+                    # Print a masked version of the API key for debugging
+                    masked_key = api_key[:4] + '*' * (len(api_key) - 8) + api_key[-4:] if len(api_key) > 8 else '****'
+                    print(f"Found API key: {masked_key}")
+                    return api_key
+        
+        print("No API key found in env.yaml")
+        return ''
+    except Exception as e:
+        print(f"Error loading API key: {e}")
+        return ''
+
+# Get the API key
+DEFAULT_API_KEY = load_api_key()
+
 # Configure CORS (Cross-Origin Resource Sharing) middleware
 # This allows the API to be accessed from different domains/origins
 app.add_middleware(
@@ -28,37 +68,70 @@ class ChatRequest(BaseModel):
     developer_message: str  # Message from the developer/system
     user_message: str      # Message from the user
     model: Optional[str] = "gpt-4.1-mini"  # Optional model selection with default
-    api_key: str          # OpenAI API key for authentication
+    api_key: Optional[str] = None  # OpenAI API key is now optional
 
 # Define the main chat endpoint that handles POST requests
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     try:
-        # Initialize OpenAI client with the provided API key
-        client = OpenAI(api_key=request.api_key)
+        # Use the provided API key or fall back to the default from env.yaml
+        api_key = request.api_key if request.api_key else DEFAULT_API_KEY
+        
+        # Debug info
+        print(f"Request received: model={request.model}, message length={len(request.user_message)}")
+        print(f"Using API key from: {'request' if request.api_key else 'env.yaml'}")
+        
+        if not api_key:
+            print("No API key available!")
+            raise HTTPException(status_code=400, detail="No API key provided and no default API key found")
+            
+        # Initialize OpenAI client with the API key
+        client = OpenAI(api_key=api_key)
         
         # Create an async generator function for streaming responses
         async def generate():
-            # Create a streaming chat completion request
-            stream = client.chat.completions.create(
-                model=request.model,
-                messages=[
-                    {"role": "developer", "content": request.developer_message},
-                    {"role": "user", "content": request.user_message}
-                ],
-                stream=True  # Enable streaming response
-            )
-            
-            # Yield each chunk of the response as it becomes available
-            for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
+            try:
+                # Create a streaming chat completion request
+                stream = client.chat.completions.create(
+                    model=request.model,
+                    messages=[
+                        {"role": "system", "content": request.developer_message},
+                        {"role": "user", "content": request.user_message}
+                    ],
+                    stream=True  # Enable streaming response
+                )
+                
+                # Yield each chunk of the response as it becomes available
+                for chunk in stream:
+                    if chunk.choices[0].delta.content is not None:
+                        content = chunk.choices[0].delta.content
+                        print(f"Streaming chunk: {content[:20]}..." if len(content) > 20 else f"Streaming chunk: {content}")
+                        yield content
+                        
+                # Send a final newline to signal the end of the stream
+                yield "\n"
+                print("Stream completed successfully")
+                
+            except Exception as e:
+                print(f"Error in stream generation: {str(e)}")
+                yield f"Error: {str(e)}"
 
-        # Return a streaming response to the client
-        return StreamingResponse(generate(), media_type="text/plain")
+        # Return a streaming response to the client with appropriate headers
+        return StreamingResponse(
+            generate(), 
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
     
     except Exception as e:
         # Handle any errors that occur during processing
+        print(f"Error in chat endpoint: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # Define a health check endpoint to verify API status

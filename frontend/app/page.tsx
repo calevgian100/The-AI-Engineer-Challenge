@@ -9,6 +9,7 @@ import ChatInput from './components/ChatInput';
 import ConversationManager from './components/ConversationManager';
 import HelpModal from './components/HelpModal';
 import { formatErrorMessage, parseApiError } from './utils/errorHandling';
+import React from 'react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -17,7 +18,6 @@ interface Message {
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [apiKey, setApiKey] = useState('');
   const [developerMessage, setDeveloperMessage] = useState('You are a helpful AI assistant.');
   const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState('gpt-4.1-mini');
@@ -25,13 +25,8 @@ export default function Home() {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load API key from localStorage if available
+  // Load settings from localStorage if available
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('openai_api_key');
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
-    }
-    
     const savedModel = localStorage.getItem('openai_model');
     if (savedModel) {
       setModel(savedModel);
@@ -45,13 +40,9 @@ export default function Home() {
 
   // Save settings to localStorage when they change
   useEffect(() => {
-    if (apiKey) {
-      localStorage.setItem('openai_api_key', apiKey);
-    }
-    
     localStorage.setItem('openai_model', model);
     localStorage.setItem('developer_message', developerMessage);
-  }, [apiKey, model, developerMessage]);
+  }, [model, developerMessage]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -101,8 +92,6 @@ export default function Home() {
   }, [messages]);
 
   const handleSendMessage = async (userMessage: string) => {
-    if (!apiKey.trim()) return;
-
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
 
@@ -115,7 +104,6 @@ export default function Home() {
         body: JSON.stringify({
           user_message: userMessage,
           developer_message: developerMessage,
-          api_key: apiKey,
           model: model,
         }),
       });
@@ -195,8 +183,6 @@ export default function Home() {
         {/* Settings Panel - Hidden on mobile by default */}
         <div className={`${isMobileSettingsOpen ? 'block' : 'hidden'} md:block`}>
           <SettingsPanel 
-            apiKey={apiKey}
-            setApiKey={setApiKey}
             model={model}
             setModel={setModel}
             developerMessage={developerMessage}
@@ -241,7 +227,7 @@ export default function Home() {
           {/* Input Area */}
           <ChatInput 
             onSendMessage={handleSendMessage} 
-            disabled={isLoading || !apiKey.trim()} 
+            disabled={isLoading} 
           />
         </div>
       </div>
