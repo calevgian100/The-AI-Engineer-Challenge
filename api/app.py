@@ -75,19 +75,20 @@ async def chat(request: ChatRequest):
                         {"role": "system", "content": request.developer_message},
                         {"role": "user", "content": request.user_message}
                     ],
-                    stream=True  # Enable streaming response
+                    stream=True,  # Enable streaming response
+                    max_tokens=1000  # Limit token count to prevent long responses
                 )
                 
                 # Yield each chunk of the response as it becomes available
                 for chunk in stream:
                     if chunk.choices[0].delta.content is not None:
                         yield chunk.choices[0].delta.content
-                        
-                # Send a final newline to signal the end of the stream
-                yield "\n"
+                
+                # Send an explicit completion marker that the frontend will recognize
+                yield "\n\n[DONE]\n"
                 
             except Exception as e:
-                yield f"Error: {str(e)}"
+                yield f"Error: {str(e)}\n\n[DONE]\n"  # Include completion marker even on error
 
         # Return a streaming response to the client with appropriate headers
         return StreamingResponse(

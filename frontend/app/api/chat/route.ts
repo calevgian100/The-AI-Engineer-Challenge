@@ -53,54 +53,59 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // For streaming responses, create a TransformStream to forward the data
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
-    
-    const transformStream = new TransformStream({
-      async transform(chunk, controller) {
-        const text = decoder.decode(chunk);
-        controller.enqueue(encoder.encode(text));
-      },
-    });
-    
-    // Pipe the response body to our transform stream
-    const readableStream = response.body;
-    if (!readableStream) {
+    // Use a simpler approach for streaming that ensures proper completion
+    const reader = response.body?.getReader();
+    if (!reader) {
       return NextResponse.json(
-        { error: 'No response from API' },
+        { error: 'No response body from API' },
         { status: 500 }
       );
     }
-    
-    const reader = readableStream.getReader();
-    const writer = transformStream.writable.getWriter();
-    
-    // Process the stream
-    (async () => {
-      try {
-        console.log('Starting to process stream...');
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            console.log('Stream processing complete');
-            break;
+
+    // Create a new stream that will be returned to the client
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          console.log('Starting to process stream...');
+          
+          // Process chunks until done
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            // If the stream is done, close the controller and break the loop
+            if (done) {
+              console.log('Stream processing complete');
+              // Add an explicit end marker to signal completion to the client
+              controller.enqueue(new TextEncoder().encode('\n\n[DONE]'));
+              controller.close();
+              break;
+            }
+            
+            // Log and forward the chunk
+            if (value) {
+              console.log(`Received chunk of size: ${value.length} bytes`);
+              controller.enqueue(value);
+            }
           }
-          console.log(`Received chunk of size: ${value.length} bytes`);
-          await writer.write(value);
+        } catch (error) {
+          console.error('Error in stream processing:', error);
+          controller.error(error);
         }
-      } catch (error) {
-        console.error('Error processing stream:', error);
-      } finally {
-        console.log('Closing stream writer');
-        await writer.close().catch(err => console.error('Error closing writer:', err));
+      },
+      
+      // This is called if the stream is canceled
+      async cancel() {
+        console.log('Stream was canceled by the client');
+        reader.cancel();
       }
-    })();
+    });
     
-    // Return the readable part of the transform stream as the response
-    return new Response(transformStream.readable, {
+    // Return the stream with appropriate headers
+    return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
       },
     });
   } catch (error) {

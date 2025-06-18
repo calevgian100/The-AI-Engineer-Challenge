@@ -74,7 +74,9 @@ export default function Home() {
   }, [messages]);
 
   const handleSendMessage = async (userMessage: string) => {
+    // Add user message to chat
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
+    // Set loading state to show thinking animation
     setIsLoading(true);
 
     try {
@@ -98,16 +100,37 @@ export default function Home() {
       const reader = response.body?.getReader();
       if (!reader) throw new Error('Response body is null');
 
+      // Initialize empty assistant message
       let assistantMessage = '';
+      
+      // Add an empty assistant message that will be updated with streaming content
+      // Important: This happens before we start reading the stream
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
-      while (true) {
+      // Process the stream
+      let streamComplete = false;
+      while (!streamComplete) {
         const { done, value } = await reader.read();
-        if (done) break;
+        
+        if (done) {
+          console.log('Stream complete (done flag)');
+          streamComplete = true;
+          break;
+        }
 
         const text = new TextDecoder().decode(value);
-        assistantMessage += text;
         
+        // Check for our explicit completion marker
+        if (text.includes('\n\n[DONE]')) {
+          console.log('Found explicit completion marker');
+          // Remove the marker from the message
+          assistantMessage += text.replace('\n\n[DONE]', '');
+          streamComplete = true;
+        } else {
+          assistantMessage += text;
+        }
+        
+        // Update the last message with the accumulated content
         setMessages((prev) => {
           const newMessages = [...prev];
           newMessages[newMessages.length - 1] = {
@@ -116,14 +139,23 @@ export default function Home() {
           };
           return newMessages;
         });
+        
+        // If we found the completion marker, break the loop
+        if (streamComplete) {
+          break;
+        }
       }
+      
+      console.log('Stream processing complete, turning off loading state');
+      // Important: Set loading to false AFTER the stream is fully processed
+      setIsLoading(false);
     } catch (error) {
       console.error('Error:', error);
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: formatErrorMessage(error) },
       ]);
-    } finally {
+      // Make sure to set loading to false on error too
       setIsLoading(false);
     }
   };
