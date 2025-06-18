@@ -48,11 +48,6 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = false }
           <PaperAirplaneIcon className="h-5 w-5" />
         </button>
       </div>
-      {disabled && (
-        <p className="text-xs text-red-500 mt-1">
-          Please enter your OpenAI API key in the settings panel to start chatting.
-        </p>
-      )}
     </div>
   );
 };

@@ -4,9 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
 import ChatMessage from './components/ChatMessage';
 import TypingIndicator from './components/TypingIndicator';
-import SettingsPanel from './components/SettingsPanel';
 import ChatInput from './components/ChatInput';
-import ConversationManager from './components/ConversationManager';
 import HelpModal from './components/HelpModal';
 import { formatErrorMessage, parseApiError } from './utils/errorHandling';
 import React from 'react';
@@ -18,31 +16,15 @@ interface Message {
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [developerMessage, setDeveloperMessage] = useState('You are a helpful AI assistant.');
   const [isLoading, setIsLoading] = useState(false);
-  const [model, setModel] = useState('gpt-4.1-mini');
-  const [isMobileSettingsOpen, setIsMobileSettingsOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // Hardcoded values instead of settings
+  const developerMessage = 'You are a helpful AI assistant.';
+  const model = 'gpt-4.1-mini';
 
-  // Load settings from localStorage if available
-  useEffect(() => {
-    const savedModel = localStorage.getItem('openai_model');
-    if (savedModel) {
-      setModel(savedModel);
-    }
-    
-    const savedDevMessage = localStorage.getItem('developer_message');
-    if (savedDevMessage) {
-      setDeveloperMessage(savedDevMessage);
-    }
-  }, []);
-
-  // Save settings to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem('openai_model', model);
-    localStorage.setItem('developer_message', developerMessage);
-  }, [model, developerMessage]);
+  // No need to load or save settings anymore as we're using hardcoded values
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -154,10 +136,6 @@ export default function Home() {
     setMessages(loadedMessages);
   };
 
-  const toggleMobileSettings = () => {
-    setIsMobileSettingsOpen(!isMobileSettingsOpen);
-  };
-
   return (
     <div className="flex flex-col h-screen max-h-screen bg-gradient-to-b from-primary-50 to-white">
       <header className="bg-white shadow-sm p-4 flex justify-between items-center">
@@ -170,36 +148,12 @@ export default function Home() {
           >
             <QuestionMarkCircleIcon className="h-6 w-6" />
           </button>
-          <button 
-            className="md:hidden px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md"
-            onClick={toggleMobileSettings}
-          >
-            {isMobileSettingsOpen ? 'Hide Settings' : 'Settings'}
-          </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-        {/* Settings Panel - Hidden on mobile by default */}
-        <div className={`${isMobileSettingsOpen ? 'block' : 'hidden'} md:block`}>
-          <SettingsPanel 
-            model={model}
-            setModel={setModel}
-            developerMessage={developerMessage}
-            setDeveloperMessage={setDeveloperMessage}
-          />
-        </div>
-
+      <div className="flex-1 overflow-hidden flex flex-col">
         {/* Chat Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Conversation Manager */}
-          <div className="bg-white p-2 border-b border-gray-200">
-            <ConversationManager 
-              currentMessages={messages}
-              onLoadConversation={handleLoadConversation}
-              onNewConversation={handleNewConversation}
-            />
-          </div>
           
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -207,7 +161,7 @@ export default function Home() {
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-gray-500">
                   <h2 className="text-xl font-semibold mb-2">Welcome to OpenAI Chat</h2>
-                  <p>Enter your OpenAI API key and start chatting!</p>
+                  <p>Start typing below to chat with the AI assistant!</p>
                   <p className="mt-2 text-sm">
                     Press <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs">Ctrl/Cmd + /</kbd> for help
                   </p>

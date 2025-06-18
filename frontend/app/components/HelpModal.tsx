@@ -26,10 +26,9 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
           <div className="mb-6">
             <h3 className="text-lg font-medium text-gray-800 mb-2">Getting Started</h3>
             <ol className="list-decimal list-inside space-y-2 text-gray-700">
-              <li>Enter your OpenAI API key in the settings panel</li>
-              <li>Select a model from the dropdown (default is gpt-4.1-mini)</li>
-              <li>Customize the system prompt if desired</li>
-              <li>Type your message and press Enter or click the send button</li>
+              <li>Type your message in the input field at the bottom</li>
+              <li>Press Enter or click the send button to chat with the AI</li>
+              <li>Your conversation will appear in the chat area</li>
             </ol>
           </div>
           
@@ -63,22 +62,14 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
           
-          <div className="mb-6">
-            <h3 className="text-lg font-medium text-gray-800 mb-2">API Key Security</h3>
-            <p className="text-gray-700">
-              Your OpenAI API key is stored locally in your browser and is never sent to our servers.
-              It is only used to make direct requests to OpenAI's API.
-            </p>
-          </div>
+          {/* API Key Security section removed */}
           
           <div>
-            <h3 className="text-lg font-medium text-gray-800 mb-2">Models</h3>
-            <ul className="list-disc list-inside space-y-2 text-gray-700">
-              <li><strong>GPT-4.1-mini</strong>: Balanced performance and cost</li>
-              <li><strong>GPT-4o</strong>: High performance, multimodal capabilities</li>
-              <li><strong>GPT-4 Turbo</strong>: Advanced reasoning with larger context window</li>
-              <li><strong>GPT-3.5 Turbo</strong>: Fast and cost-effective</li>
-            </ul>
+            <h3 className="text-lg font-medium text-gray-800 mb-2">About</h3>
+            <p className="text-gray-700">
+              This chat application uses OpenAI's GPT-4.1-mini model to provide intelligent responses.
+              The application is built with Next.js for the frontend and FastAPI for the backend.
+            </p>
           </div>
         </div>
         
