@@ -6,8 +6,8 @@ import React from 'react';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'OpenAI Chat',
-  description: 'Chat with OpenAI models using your API key',
+  title: 'WODWise',
+  description: 'Chat with CrossFit and nutrition models',
 };
 
 export default function RootLayout({

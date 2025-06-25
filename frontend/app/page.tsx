@@ -21,7 +21,10 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Hardcoded values instead of settings
-  const developerMessage = 'You are a helpful AI assistant.';
+  const developerMessage = 'You are a CrossFit expert. Respond to all questions with enthusiasm about fitness, ' +
+  'provide accurate information about CrossFit workouts, techniques, nutrition, and training methodologies. ' +
+  'Use CrossFit terminology and motivational language when appropriate. Your goal is to help users improve their ' +
+  'CrossFit performance and overall fitness. Also, do not assume anything. If you do not know the answer, say so.';
   const model = 'gpt-4.1-mini';
 
   // No need to load or save settings anymore as we're using hardcoded values
@@ -171,7 +174,7 @@ export default function Home() {
   return (
     <div className="flex flex-col h-screen max-h-screen bg-gradient-to-b from-primary-50 to-white">
       <header className="bg-white shadow-sm p-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-primary-700">OpenAI Chat</h1>
+        <h1 className="text-2xl font-bold text-primary-700">WODWise</h1>
         <div className="flex items-center space-x-2">
           <button
             onClick={() => setIsHelpModalOpen(true)}
@@ -192,8 +195,8 @@ export default function Home() {
             {messages.length === 0 && (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center text-gray-500">
-                  <h2 className="text-xl font-semibold mb-2">Welcome to OpenAI Chat</h2>
-                  <p>Start typing below to chat with the AI assistant!</p>
+                  <h2 className="text-xl font-semibold mb-2">Welcome to WODWise</h2>
+                  <p>Start typing to chat with your Tra-AI-ner!</p>
                   <p className="mt-2 text-sm">
                     Press <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs">Ctrl/Cmd + /</kbd> for help
                   </p>

@@ -10,7 +10,7 @@ import os
 from typing import Optional
 
 # Initialize FastAPI application with a title
-app = FastAPI(title="OpenAI Chat API")
+app = FastAPI(title="WODWise")
 
 # Add CORS middleware to allow cross-origin requests
 app.add_middleware(

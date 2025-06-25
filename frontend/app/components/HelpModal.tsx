@@ -49,14 +49,6 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
                     <td className="py-2 pr-4 font-mono text-sm">Esc</td>
                     <td className="py-2">Close modals</td>
                   </tr>
-                  <tr className="border-b border-gray-200">
-                    <td className="py-2 pr-4 font-mono text-sm">Ctrl/Cmd + N</td>
-                    <td className="py-2">New conversation</td>
-                  </tr>
-                  <tr>
-                    <td className="py-2 pr-4 font-mono text-sm">Ctrl/Cmd + S</td>
-                    <td className="py-2">Save conversation</td>
-                  </tr>
                 </tbody>
               </table>
             </div>
