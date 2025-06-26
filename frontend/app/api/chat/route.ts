@@ -76,7 +76,8 @@ export async function POST(request: NextRequest) {
             if (done) {
               console.log('Stream processing complete');
               // Add an explicit end marker to signal completion to the client
-              controller.enqueue(new TextEncoder().encode('\n\n[DONE]'));
+              // Use a special non-visible marker that won't be displayed in the UI
+              controller.enqueue(new TextEncoder().encode('\n\n__STREAM_COMPLETE__'));
               controller.close();
               break;
             }
