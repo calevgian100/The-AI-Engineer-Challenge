@@ -12,11 +12,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ role, content }) => {
       <div
         className={`max-w-[80%] rounded-lg p-3 ${
           role === 'user'
-            ? 'bg-primary-600 text-white'
-            : 'bg-gray-100 text-gray-800'
+            ? 'bg-neonGreen border border-white text-black shadow-md'
+            : 'bg-black border border-neonGreen text-neonGreen shadow-[0_0_10px_rgba(57,255,20,0.15)]'
         }`}
       >
-        <div className="prose prose-sm max-w-none">
+        <div className={`prose prose-sm max-w-none ${role === 'assistant' ? 'prose-invert' : ''}`}>
           <ReactMarkdown>{content}</ReactMarkdown>
         </div>
       </div>

@@ -24,28 +24,28 @@ const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, disabled = false }
   };
 
   return (
-    <div className="border-t border-gray-200 p-4 bg-white">
-      <div className="flex items-end space-x-2">
+    <div className="p-4 flex justify-center w-full">
+      <div className="flex items-end space-x-2 w-full bg-primary-900 border border-primary-800 rounded-lg shadow-lg px-4 py-3 transition-all duration-300 hover:border-neonGreen/50 focus-within:border-neonGreen focus-within:shadow-[0_0_15px_rgba(57,255,20,0.15)]">
         <textarea
-          className="flex-1 p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+          className="flex-1 p-2 bg-primary-900 text-white border-none focus:outline-none focus:ring-0 resize-none placeholder-gray-400 text-sm"
           placeholder="Type your message..."
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={2}
+          rows={1}
           disabled={disabled}
         />
         <button
           onClick={handleSend}
           disabled={!message.trim() || disabled}
-          className={`p-3 rounded-full ${
+          className={`p-2 rounded-full ${
             !message.trim() || disabled
-              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              : 'bg-primary-600 text-white hover:bg-primary-700'
+              ? 'bg-primary-800 text-gray-500 cursor-not-allowed'
+              : 'bg-neonGreen text-black hover:bg-white'
           }`}
           title="Send message"
         >
-          <PaperAirplaneIcon className="h-5 w-5" />
+          <PaperAirplaneIcon className="h-4 w-4" />
         </button>
       </div>
     </div>

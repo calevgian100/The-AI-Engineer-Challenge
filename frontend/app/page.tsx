@@ -172,19 +172,22 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-gradient-to-b from-primary-50 to-white">
-      <header className="bg-white shadow-sm p-4 flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-primary-700">WODWise</h1>
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setIsHelpModalOpen(true)}
-            className="text-gray-500 hover:text-gray-700"
-            title="Help"
-          >
-            <QuestionMarkCircleIcon className="h-6 w-6" />
-          </button>
+    <div className="flex flex-col h-screen max-h-screen bg-primary-950">
+      {/* Header that appears when messages are present */}
+      {messages.length > 0 && (
+        <div className="bg-primary-900 border-b border-primary-800 py-3 px-4 flex justify-center items-center relative overflow-hidden">
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neonGreen to-transparent"></div>
+          </div>
+          <h1 className="text-2xl font-bold text-neonGreen relative z-10 flex items-center">
+            <svg className="w-6 h-6 mr-2" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+              <path fillRule="evenodd" d="M10 3a7 7 0 100 14 7 7 0 000-14zm-9 7a9 9 0 1118 0 9 9 0 01-18 0z" clipRule="evenodd" />
+              <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3.586l2.707 2.707a1 1 0 01-1.414 1.414l-3-3A1 1 0 019 10V6a1 1 0 011-1z" clipRule="evenodd" />
+            </svg>
+            WODWise
+          </h1>
         </div>
-      </header>
+      )}
 
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* Chat Area */}
@@ -194,11 +197,11 @@ export default function Home() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
               <div className="flex items-center justify-center h-full">
-                <div className="text-center text-gray-500">
-                  <h2 className="text-xl font-semibold mb-2">Welcome to WODWise</h2>
-                  <p>Start typing to chat with your Tra-AI-ner!</p>
-                  <p className="mt-2 text-sm">
-                    Press <kbd className="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs">Ctrl/Cmd + /</kbd> for help
+                <div className="text-center">
+                  <h2 className="text-3xl font-bold mb-4 text-neonGreen">Welcome to WODWise</h2>
+                  <p className="text-white text-xl mb-6">Start typing to chat with your Tra-AI-ner!</p>
+                  <p className="mt-4 text-sm text-gray-400">
+                    Press <kbd className="px-1 py-0.5 bg-primary-800 border border-neonGreen text-neonGreen rounded text-xs">Ctrl/Cmd + /</kbd> for help
                   </p>
                 </div>
               </div>
@@ -214,10 +217,19 @@ export default function Home() {
           </div>
 
           {/* Input Area */}
-          <ChatInput 
-            onSendMessage={handleSendMessage} 
-            disabled={isLoading} 
-          />
+          <div className="flex items-center justify-center space-x-3 w-full max-w-6xl mx-auto">
+            <ChatInput 
+              onSendMessage={handleSendMessage} 
+              disabled={isLoading} 
+            />
+            <button
+              onClick={() => setIsHelpModalOpen(true)}
+              className="p-2 rounded-full bg-black text-neonGreen border border-neonGreen hover:bg-primary-800 transition-colors duration-200"
+              title="Help"
+            >
+              <QuestionMarkCircleIcon className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
 
