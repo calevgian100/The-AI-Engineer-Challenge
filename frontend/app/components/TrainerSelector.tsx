@@ -42,17 +42,39 @@ const TrainerSelector: React.FC<TrainerSelectorProps> = ({
   
   // Close dropdown when clicking outside
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
-    };
+    }
+    
+    // Position the dropdown menu when it opens
+    function positionDropdown() {
+      if (isOpen && dropdownRef.current) {
+        const rect = dropdownRef.current.getBoundingClientRect();
+        const dropdownMenu = document.querySelector('.trainer-dropdown-menu') as HTMLElement;
+        if (dropdownMenu) {
+          dropdownMenu.style.top = `${rect.bottom + window.scrollY}px`;
+          dropdownMenu.style.left = `${rect.left + window.scrollX}px`;
+          dropdownMenu.style.width = `${rect.width}px`;
+        }
+      }
+    }
     
     document.addEventListener('mousedown', handleClickOutside);
+    
+    // Position dropdown when it opens
+    if (isOpen) {
+      positionDropdown();
+      // Also position on resize
+      window.addEventListener('resize', positionDropdown);
+    }
+    
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('resize', positionDropdown);
     };
-  }, []);
+  }, [isOpen]);
 
   // Get trainer icon based on level
   const getTrainerIcon = (trainerId: string) => {
@@ -71,7 +93,7 @@ const TrainerSelector: React.FC<TrainerSelectorProps> = ({
   return (
     <div 
       ref={dropdownRef}
-      className="flex items-center space-x-3 bg-black bg-opacity-80 px-5 py-2.5 rounded-lg border border-neonGreen/30 shadow-[0_0_10px_rgba(57,255,20,0.15)] transition-all duration-300 hover:border-neonGreen/40 hover:shadow-[0_0_15px_rgba(57,255,20,0.25)] w-[380px]"
+      className="flex items-center space-x-3 bg-black bg-opacity-80 px-5 py-2.5 rounded-lg border border-neonGreen/30 shadow-[0_0_10px_rgba(57,255,20,0.15)] transition-all duration-300 hover:border-neonGreen/40 hover:shadow-[0_0_15px_rgba(57,255,20,0.25)] w-[380px] relative z-30"
     >
       {getTrainerIcon(currentTrainer)}
       <div className="flex flex-col relative w-full text-left">
@@ -100,7 +122,7 @@ const TrainerSelector: React.FC<TrainerSelectorProps> = ({
         
         {/* Dropdown menu */}
         {isOpen && (
-          <div className="absolute top-full left-0 mt-2 w-full min-w-[240px] bg-black border border-neonGreen/50 rounded-lg shadow-[0_0_15px_rgba(57,255,20,0.25)] z-10 overflow-hidden text-left">
+          <div className="trainer-dropdown-menu fixed mt-2 w-full min-w-[240px] bg-black border border-neonGreen/50 rounded-lg shadow-[0_0_15px_rgba(57,255,20,0.25)] z-[9999] overflow-hidden text-left" style={{top: 'auto', left: 'auto', transform: 'none'}}>
             {Object.entries(trainers).map(([id, { name }]) => (
               <div 
                 key={id} 

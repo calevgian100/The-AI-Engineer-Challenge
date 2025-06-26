@@ -26,7 +26,7 @@ export default function Home() {
     'You are a CrossFit trainer/coach AND nutritionist. ' +
     'You are directly speaking to the user as their personal coach, not as a third party. ' +
     'Never suggest that the user should "check with their coach" since YOU are their coach. ' +
-    'Format any tables properly with markdown so they display correctly in the chat. ' +
+    'Do not reply with table data as it is hard to format on the chat. ' +
     'Assume the user\'s experience level matches your own unless they specify otherwise. ' +
     'IMPORTANT: Never include "[DONE]" in your responses as this is an internal marker. ' +
     'If you need to present tabular data, use proper markdown table format with headers and aligned columns.';
@@ -228,21 +228,23 @@ export default function Home() {
               <path fillRule="evenodd" d="M10 3a7 7 0 100 14 7 7 0 000-14zm-9 7a9 9 0 1118 0 9 9 0 01-18 0z" clipRule="evenodd" />
               <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3.586l2.707 2.707a1 1 0 01-1.414 1.414l-3-3A1 1 0 019 10V6a1 1 0 011-1z" clipRule="evenodd" />
             </svg>
-            WODWise
+            WOD-Wise
           </h1>
-          <TrainerSelector 
-            trainers={trainerPersonas}
-            currentTrainer={currentTrainer}
-            onTrainerChange={(trainerId) => {
-              setCurrentTrainer(trainerId as keyof typeof trainerPersonas);
-              // Clear messages when changing trainers
-              if (messages.length > 0) {
-                if (confirm('Changing trainers will start a new conversation. Continue?')) {
-                  setMessages([]);
+          <div className="relative z-30">
+            <TrainerSelector 
+              trainers={trainerPersonas}
+              currentTrainer={currentTrainer}
+              onTrainerChange={(trainerId) => {
+                setCurrentTrainer(trainerId as keyof typeof trainerPersonas);
+                // Clear messages when changing trainers
+                if (messages.length > 0) {
+                  if (confirm('Changing trainers will start a new conversation. Continue?')) {
+                    setMessages([]);
+                  }
                 }
-              }
-            }}
-          />
+              }}
+            />
+          </div>
         </div>
       )}
 
