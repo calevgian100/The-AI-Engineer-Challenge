@@ -383,3 +383,19 @@ So, you'll complete 135 total reps! Keep up the great work! If you want any tips
 ---
 
 **Vibe:** The answer looks concise and precise.
+
+---
+
+---
+
+### Discussion Question #1:
+
+## What are some limitations of vibe checking as an evaluation tool?
+
+- It is highly subjective and non-repeatable. Different evaluators may focus on different things and may not agree on the same evaluation.
+
+- It is not objective and can be influenced by personal biases and emotions.
+
+- There is no 'rubric' to evaluate the responses, making it hard to track progress or measure quality.
+
+- Silent failures. Vibe checks often work for visible errors but can overlook subtle hallucinations that sound plausible, incorrect reasoning that feels 'confident' or give biased or inappropriate outputs in sensitive contexts.
