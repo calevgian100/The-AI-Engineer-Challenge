@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
 import ChatMessage from './components/ChatMessage';
 import TypingIndicator from './components/TypingIndicator';
 import ChatInput from './components/ChatInput';
 import HelpModal from './components/HelpModal';
+import TrainerSelector from './components/TrainerSelector';
 import { formatErrorMessage, parseApiError } from './utils/errorHandling';
 import React from 'react';
 
@@ -20,11 +21,36 @@ export default function Home() {
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Hardcoded values instead of settings
-  const developerMessage = 'You are a CrossFit expert. Respond to all questions with enthusiasm about fitness, ' +
-  'provide accurate information about CrossFit workouts, techniques, nutrition, and training methodologies. ' +
-  'Use CrossFit terminology and motivational language when appropriate. Your goal is to help users improve their ' +
-  'CrossFit performance and overall fitness. Also, do not assume anything. If you do not know the answer, say so.';
+  // Trainer personas
+  const trainerPersonas = {
+    expert: {
+      name: "Elite Coach",
+      message: 'You are an elite CrossFit coach with 15+ years of experience. Respond with deep expertise about fitness, ' +
+      'provide detailed and accurate information about CrossFit workouts, techniques, nutrition, and training methodologies. ' +
+      'Use advanced CrossFit terminology and motivational language. Your goal is to help users maximize their ' +
+      'CrossFit performance through expert advice. If you do not know the answer, acknowledge it and suggest reliable resources.'
+    },
+    standard: {
+      name: "Regular Coach",
+      message: 'You are a CrossFit coach with 5 years of experience. Respond to all questions with enthusiasm about fitness, ' +
+      'provide accurate information about CrossFit workouts, techniques, nutrition, and training methodologies. ' +
+      'Use CrossFit terminology and motivational language when appropriate. Your goal is to help users improve their ' +
+      'CrossFit performance and overall fitness. If you do not know the answer, say so.'
+    },
+    beginner: {
+      name: "Novice Trainer",
+      message: 'You are a new CrossFit trainer who recently got certified. You have basic knowledge but limited experience. ' +
+      'Be enthusiastic but sometimes unsure about advanced topics. Stick to fundamental CrossFit movements and basic nutrition advice. ' +
+      'Occasionally mention that you\'re still learning certain advanced techniques. Focus on encouragement rather than technical expertise. ' +
+      'Be honest when you don\'t know something and suggest the user might want to consult a more experienced coach for complex questions.'
+    }
+  };
+  
+  // State for current trainer
+  const [currentTrainer, setCurrentTrainer] = useState<keyof typeof trainerPersonas>('standard');
+  
+  // Get the current developer message based on selected trainer
+  const developerMessage = trainerPersonas[currentTrainer].message;
   const model = 'gpt-4.1-mini';
 
   // No need to load or save settings anymore as we're using hardcoded values
@@ -175,7 +201,7 @@ export default function Home() {
     <div className="flex flex-col h-screen max-h-screen bg-primary-950">
       {/* Header that appears when messages are present */}
       {messages.length > 0 && (
-        <div className="bg-primary-900 border-b border-primary-800 py-3 px-4 flex justify-center items-center relative overflow-hidden">
+        <div className="bg-primary-900 border-b border-primary-800 py-3 px-4 flex flex-col sm:flex-row justify-center items-center relative overflow-hidden gap-4">
           <div className="absolute inset-0 opacity-10">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neonGreen to-transparent"></div>
           </div>
@@ -186,6 +212,19 @@ export default function Home() {
             </svg>
             WODWise
           </h1>
+          <TrainerSelector 
+            trainers={trainerPersonas}
+            currentTrainer={currentTrainer}
+            onTrainerChange={(trainerId) => {
+              setCurrentTrainer(trainerId as keyof typeof trainerPersonas);
+              // Clear messages when changing trainers
+              if (messages.length > 0) {
+                if (confirm('Changing trainers will start a new conversation. Continue?')) {
+                  setMessages([]);
+                }
+              }
+            }}
+          />
         </div>
       )}
 
@@ -196,13 +235,20 @@ export default function Home() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {messages.length === 0 && (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <h2 className="text-3xl font-bold mb-4 text-neonGreen">Welcome to WODWise</h2>
-                  <p className="text-white text-xl mb-6">Start typing to chat with your Tra-AI-ner!</p>
-                  <p className="mt-4 text-sm text-gray-400">
-                    Press <kbd className="px-1 py-0.5 bg-primary-800 border border-neonGreen text-neonGreen rounded text-xs">Ctrl/Cmd + /</kbd> for help
-                  </p>
+              <div className="flex flex-col items-center justify-center flex-grow p-4 text-center">
+                <h1 className="text-4xl font-bold text-neonGreen mb-4">WODWise</h1>
+                <p className="text-xl text-gray-300 mb-6">Your CrossFit Training Assistant</p>
+                <div className="max-w-md text-gray-400 text-sm mb-6">
+                  <p className="mb-4">Ask me anything about CrossFit workouts, techniques, nutrition, or training plans!</p>
+                </div>
+                <div className="mb-6">
+                  <TrainerSelector 
+                    trainers={trainerPersonas}
+                    currentTrainer={currentTrainer}
+                    onTrainerChange={(trainerId) => {
+                      setCurrentTrainer(trainerId as keyof typeof trainerPersonas);
+                    }}
+                  />
                 </div>
               </div>
             )}
