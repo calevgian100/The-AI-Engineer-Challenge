@@ -85,10 +85,11 @@ async def chat(request: ChatRequest):
                         yield chunk.choices[0].delta.content
                 
                 # Send an explicit completion marker that the frontend will recognize
-                yield "\n\n[DONE]\n"
+                # Using a less visible marker that won't be displayed in the UI
+                yield "\n\n__STREAM_COMPLETE__"
                 
             except Exception as e:
-                yield f"Error: {str(e)}\n\n[DONE]\n"  # Include completion marker even on error
+                yield f"Error: {str(e)}\n\n__STREAM_COMPLETE__"  # Include the new completion marker even on error
 
         # Return a streaming response to the client with appropriate headers
         return StreamingResponse(
