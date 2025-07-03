@@ -7,10 +7,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
+
     // Extract required parameters
     const { user_message, developer_message, model, use_rag } = body;
-    
+
     // Validate required parameters
     if (!user_message) {
       return NextResponse.json(
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
+
     // Forward request to backend API
     console.log(`Sending request to: ${API_URL}/chat`);
     const response = await fetch(`${API_URL}/chat`, {
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
         use_rag,
       }),
     });
-    
+
     // Handle error responses
     if (!response.ok) {
       let errorData;
@@ -46,14 +46,14 @@ export async function POST(request: NextRequest) {
           { status: response.status }
         );
       }
-      
+
       // Return error from backend
       return NextResponse.json(
         { error: errorData.error || errorData.message || 'Unknown API error' },
         { status: response.status }
       );
     }
-    
+
     // Use a simpler approach for streaming that ensures proper completion
     const reader = response.body?.getReader();
     if (!reader) {
@@ -68,21 +68,23 @@ export async function POST(request: NextRequest) {
       async start(controller) {
         try {
           console.log('Starting to process stream...');
-          
+
           // Process chunks until done
           while (true) {
             const { done, value } = await reader.read();
-            
+
             // If the stream is done, close the controller and break the loop
             if (done) {
               console.log('Stream processing complete');
               // Add an explicit end marker to signal completion to the client
               // Use a special non-visible marker that won't be displayed in the UI
-              controller.enqueue(new TextEncoder().encode('\n\n__STREAM_COMPLETE__'));
+              controller.enqueue(
+                new TextEncoder().encode('__STREAM_COMPLETE__')
+              );
               controller.close();
               break;
             }
-            
+
             // Log and forward the chunk
             if (value) {
               console.log(`Received chunk of size: ${value.length} bytes`);
@@ -94,20 +96,20 @@ export async function POST(request: NextRequest) {
           controller.error(error);
         }
       },
-      
+
       // This is called if the stream is canceled
       async cancel() {
         console.log('Stream was canceled by the client');
         reader.cancel();
-      }
+      },
     });
-    
+
     // Return the stream with appropriate headers
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain',
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
       },
     });
   } catch (error) {

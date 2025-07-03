@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Dict, Any, Optional, Union
 import uuid
+import os
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.http.models import Distance, VectorParams
@@ -13,11 +14,23 @@ class QdrantVectorStore:
     def __init__(self, collection_name: str = "documents", embedding_model: EmbeddingModel = None):
         # Initialize or use the shared Qdrant client
         if QdrantVectorStore._shared_client is None:
-            # Use a persistent local directory instead of in-memory
-            import os
-            qdrant_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'qdrant_data')
-            os.makedirs(qdrant_path, exist_ok=True)
-            QdrantVectorStore._shared_client = QdrantClient(path=qdrant_path)
+            # Check for Qdrant Cloud configuration in environment variables
+            qdrant_url = os.environ.get("QDRANT_URL")
+            qdrant_api_key = os.environ.get("QDRANT_API_KEY")
+            
+            # If Qdrant Cloud configuration exists, use cloud client
+            if qdrant_url and qdrant_api_key:
+                print(f"Connecting to Qdrant Cloud at {qdrant_url}")
+                QdrantVectorStore._shared_client = QdrantClient(
+                    url=qdrant_url,
+                    api_key=qdrant_api_key,
+                )
+            else:
+                # Fall back to local storage
+                print("Using local Qdrant storage")
+                qdrant_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'qdrant_data')
+                os.makedirs(qdrant_path, exist_ok=True)
+                QdrantVectorStore._shared_client = QdrantClient(path=qdrant_path)
         
         self.client = QdrantVectorStore._shared_client
         self.collection_name = collection_name
@@ -122,6 +135,59 @@ class QdrantVectorStore:
         )
         
         return ids
+    
+    def get_all_pdf_metadata(self) -> List[Dict[str, Any]]:
+        """Retrieve metadata for all PDFs stored in the vector database"""
+        try:
+            # Get all points with scroll API
+            pdf_files = {}
+            
+            # Use scroll to get all points
+            scroll_result = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=100,  # Fetch in batches
+                with_payload=True,
+                with_vectors=False  # We don't need the vectors
+            )
+            
+            # Process results
+            points = scroll_result[0]
+            
+            # Extract unique PDF files from points
+            for point in points:
+                if point.payload and "metadata" in point.payload:
+                    metadata = point.payload["metadata"]
+                    if "source" in metadata:
+                        filename = metadata["source"]
+                        file_id = None
+                        
+                        # Extract file_id from filename if it follows our naming convention
+                        if '_' in filename:
+                            parts = filename.split('_', 1)
+                            if len(parts) == 2:
+                                file_id = parts[0]
+                        
+                        # If we couldn't extract a file_id, generate one from the filename
+                        if not file_id:
+                            import hashlib
+                            file_id = hashlib.md5(filename.encode()).hexdigest()[:8]
+                        
+                        # Store PDF metadata
+                        if file_id not in pdf_files:
+                            pdf_files[file_id] = {
+                                "file_id": file_id,
+                                "filename": filename.split('_', 1)[-1] if '_' in filename else filename,
+                                "num_chunks": 1,
+                                "status": "completed"  # If it's in Qdrant, it's completed
+                            }
+                        else:
+                            # Increment chunk count
+                            pdf_files[file_id]["num_chunks"] += 1
+            
+            return list(pdf_files.values())
+        except Exception as e:
+            print(f"Error retrieving PDF metadata: {e}")
+            return []
     
     def similarity_search(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
         """Search for documents similar to query"""

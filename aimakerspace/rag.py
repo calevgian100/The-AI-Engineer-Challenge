@@ -122,13 +122,16 @@ class RAGQueryEngine:
                 yield "I don't have any relevant information from your uploaded PDFs to answer this question. Please try a different question related to the PDF content."
                 return
                 
-            # Check if the relevance scores are too low (below 50%)
+            # Check if ALL relevance scores are too low (all below 50%)
             # Assuming scores are between 0 and 1
+            max_score = max(result.get('score', 0) for result in search_results)
             avg_score = sum(result.get('score', 0) for result in search_results) / len(search_results)
-            print(f"Average relevance score: {avg_score:.2f}")
-            if avg_score < 0.5:
+            print(f"Maximum relevance score: {max_score:.2f}, Average relevance score: {avg_score:.2f}")
+            
+            # Only show the not relevant message if ALL scores are below 50%
+            if max_score < 0.5:
                 relevance_percentage = int(avg_score * 100)
-                print(f"Relevance too low: {relevance_percentage}%")
+                print(f"All relevance scores too low. Max: {max_score:.2f}, Avg: {relevance_percentage}%")
                 yield f"While I found some content in your PDFs, it doesn't seem directly relevant to your question (relevance: {relevance_percentage}%). Please try a different question related to the PDF content."
                 return
             
@@ -176,6 +179,9 @@ class RAGQueryEngine:
         # Stream response from chat model
         async for chunk in self.chat_model.astream(messages):
             yield chunk
+            
+        # Add completion marker to signal the end of the stream
+        yield "__STREAM_COMPLETE__"
     
     def _format_context(self, search_results: List[Dict[str, Any]]) -> str:
         """Format search results into a context string for prompt"""

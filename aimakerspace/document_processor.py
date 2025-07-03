@@ -1,4 +1,5 @@
 import os
+import uuid
 from typing import List, Dict, Any, Optional
 from aimakerspace.text_utils import PDFLoader, CharacterTextSplitter
 from aimakerspace.qdrant_store import QdrantVectorStore
@@ -16,7 +17,7 @@ class DocumentProcessor:
         )
         self.vector_store = QdrantVectorStore(collection_name=collection_name)
     
-    def process_pdf(self, file_path: str) -> Dict[str, Any]:
+    def process_pdf(self, file_path: str, custom_filename: str = None) -> Dict[str, Any]:
         """Process a PDF file and store its chunks in the vector store"""
         print(f"Processing PDF: {file_path}")
         # Check if file exists
@@ -31,14 +32,21 @@ class DocumentProcessor:
             print("Warning: No documents loaded from PDF!")
         
         # Get filename for metadata
-        filename = os.path.basename(file_path)
+        if custom_filename:
+            filename = custom_filename
+        else:
+            filename = os.path.basename(file_path)
+        
+        # Generate a unique ID for this PDF
+        file_id = os.path.basename(file_path).split('_')[0] if '_' in os.path.basename(file_path) else str(uuid.uuid4())[:8]
         
         # Split text into chunks
         chunks = self.text_splitter.split_texts(documents)
         
-        # Create metadata for each chunk
+        # Create metadata for each chunk with file_id
         metadatas = [{
             "source": filename,
+            "file_id": file_id,
             "chunk_index": i,
             "total_chunks": len(chunks)
         } for i in range(len(chunks))]
@@ -54,7 +62,7 @@ class DocumentProcessor:
             "chunk_ids": ids
         }
     
-    async def aprocess_pdf(self, file_path: str) -> Dict[str, Any]:
+    async def aprocess_pdf(self, file_path: str, custom_filename: str = None) -> Dict[str, Any]:
         """Process a PDF file and store its chunks in the vector store asynchronously"""
         # Check if file exists
         if not os.path.exists(file_path):
@@ -65,14 +73,21 @@ class DocumentProcessor:
         documents = loader.load_documents()
         
         # Get filename for metadata
-        filename = os.path.basename(file_path)
+        if custom_filename:
+            filename = custom_filename
+        else:
+            filename = os.path.basename(file_path)
+        
+        # Generate a unique ID for this PDF
+        file_id = os.path.basename(file_path).split('_')[0] if '_' in os.path.basename(file_path) else str(uuid.uuid4())[:8]
         
         # Split text into chunks
         chunks = self.text_splitter.split_texts(documents)
         
-        # Create metadata for each chunk
+        # Create metadata for each chunk with file_id
         metadatas = [{
             "source": filename,
+            "file_id": file_id,
             "chunk_index": i,
             "total_chunks": len(chunks)
         } for i in range(len(chunks))]

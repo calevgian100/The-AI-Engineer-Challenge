@@ -126,6 +126,58 @@ While it is a bit counter-intuitive to set things up before jumping into vibe-co
 </details>
 
 <details>
+  <summary>🚀 Deploying to Vercel with Qdrant Cloud</summary>
+
+## Serverless Deployment with Qdrant Cloud
+
+This application has been optimized for serverless deployment using Qdrant Cloud for vector storage. Follow these steps to deploy:
+
+### 1. Set up Qdrant Cloud
+
+1. Create an account at [Qdrant Cloud](https://cloud.qdrant.io/)
+2. Create a new cluster (free tier is sufficient for testing)
+3. Once your cluster is ready, copy your cluster URL and API key
+
+### 2. Configure Environment Variables
+
+1. Copy `env.yaml.example` to `env.yaml`
+2. Add your OpenAI API key
+3. Uncomment and add your Qdrant Cloud URL and API key:
+
+```yaml
+openai_api_key: your_openai_api_key_here
+
+# Qdrant Cloud Configuration
+qdrant_url: https://your-cluster-id.us-east.aws.cloud.qdrant.io
+qdrant_api_key: your_qdrant_api_key_here
+```
+
+### 3. Deploy Backend
+
+The backend needs to be deployed to a service that supports Python FastAPI applications. Good options include:
+
+- [Railway](https://railway.app/)
+- [Render](https://render.com/)
+- [Heroku](https://www.heroku.com/)
+
+Make sure to set the environment variables from your `env.yaml` file in your hosting provider's dashboard.
+
+### 4. Deploy Frontend to Vercel
+
+1. Push your code to GitHub
+2. Connect your GitHub repository to Vercel
+3. Add an environment variable `NEXT_PUBLIC_API_URL` pointing to your deployed backend URL
+4. Deploy!
+
+### Important Notes
+
+- This application no longer uses local file storage for PDFs, making it fully compatible with serverless environments
+- All PDF data is stored in Qdrant Cloud, ensuring persistence across deployments
+- The backend API has been updated to work exclusively with Qdrant Cloud
+
+</details>
+
+<details>
   <summary>🚀 Deploying Your First LLM-powered Application with Vercel</summary>
 
 1. Ensure you have signed into [Vercel](https://vercel.com/) with your GitHub account.

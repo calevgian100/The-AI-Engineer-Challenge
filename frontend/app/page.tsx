@@ -41,7 +41,7 @@ export default function Home() {
     'Never suggest that the user should "check with their coach" since YOU are their coach. ' +
     'Do not reply with table data as it is hard to format on the chat. ' +
     'Assume the user\'s experience level matches your own unless they specify otherwise. ' +
-    'IMPORTANT: Never include "[DONE]" in your responses as this is an internal marker. ' +
+    'IMPORTANT: Never include "__STREAM_COMPLETE__" in your responses as this is an internal marker. ' +
     'If you need to present tabular data, use proper markdown table format with headers and aligned columns.';
 
   // Trainer personas
@@ -231,8 +231,8 @@ export default function Home() {
                 console.error('Error parsing sources:', e);
               }
             } 
-            // Check for completion marker
-            else if (data.includes('[DONE]')) {
+            // Check for completion marker - be flexible with format
+            else if (data.includes('__STREAM_COMPLETE__')) {
               console.log('Found completion marker in SSE');
               streamComplete = true;
             } 
@@ -256,17 +256,10 @@ export default function Home() {
         } 
         // Handle regular streaming (non-RAG mode)
         else {
-          // Check for completion marker
-          if (text.includes('\n\n__STREAM_COMPLETE__')) {
-            console.log('Found explicit completion marker');
-            // Remove the marker from the message
-            assistantMessage += text.replace('\n\n__STREAM_COMPLETE__', '');
-            streamComplete = true;
-          } else if (text.includes('[DONE]')) {
-            // Handle legacy marker for backward compatibility
-            console.log('Found legacy completion marker');
-            // Remove the marker from the message
-            assistantMessage += text.replace('[DONE]', '');
+          // Check for completion marker - be flexible with format
+          if (text.includes('__STREAM_COMPLETE__')) {
+            console.log('Found completion marker in stream');
+            // Remove the marker from the message (handle both formats)
             streamComplete = true;
           } else {
             assistantMessage += text;

@@ -36,29 +36,38 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-# Create uploads directory if it doesn't exist
-UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads')
-os.makedirs(UPLOADS_DIR, exist_ok=True)
-
+# Define a constant for processing status tracking
 processing_status = {}
 
-# Load API key from env.yaml file
-def load_api_key():
+# Load environment variables from env.yaml file
+def load_env_vars():
+    env_vars = {}
     try:
         env_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'env.yaml')
         with open(env_file_path, 'r') as file:
             content = file.read()
-            # Simple parsing: look for line starting with 'openai_api_key:'
+            # Simple parsing for each key in the YAML file
             for line in content.splitlines():
-                if line.strip().startswith('openai_api_key:'):
-                    # Extract the API key value (remove 'openai_api_key:' and strip quotes)
-                    api_key = line.split(':', 1)[1].strip()
-                    # Remove surrounding quotes if present
-                    api_key = api_key.strip('\'"')
-                    return api_key
-        return ''
+                line = line.strip()
+                # Skip comments and empty lines
+                if not line or line.startswith('#'):
+                    continue
+                if ':' in line:
+                    key, value = line.split(':', 1)
+                    key = key.strip()
+                    value = value.strip().strip('\'"')
+                    if value:  # Only add non-empty values
+                        env_vars[key] = value
+                        # Also set as environment variable for other modules to access
+                        os.environ[key.upper()] = value
+        return env_vars
     except Exception as e:
-        return ''
+        print(f"Error loading environment variables: {e}")
+        return {}
+
+def load_api_key():
+    env_vars = load_env_vars()
+    return env_vars.get('openai_api_key', '')
 
 # Get the API key
 DEFAULT_API_KEY = load_api_key()
@@ -92,16 +101,35 @@ class ProcessingStatus(BaseModel):
     num_chunks: Optional[int] = None
 
 # Function to process PDF in the background
-async def process_pdf_background(file_path: str, file_id: str):
+async def process_pdf_background(file_content: bytes, file_id: str, original_filename: str):
     try:
+        import tempfile
         processing_status[file_id] = {"status": "processing", "message": "Processing PDF..."}
-        result = document_processor.process_pdf(file_path)
-        processing_status[file_id] = {
-            "status": "completed",
-            "message": "PDF processed successfully",
-            "filename": result["filename"],
-            "num_chunks": result["num_chunks"]
-        }
+        
+        # Create a temporary file to process the PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            temp_file.write(file_content)
+            temp_path = temp_file.name
+        
+        try:
+            # Process the PDF using the document processor with the original filename
+            result = document_processor.process_pdf(temp_path, custom_filename=original_filename)
+            
+            # Ensure the filename in the result is the original filename
+            result["filename"] = original_filename
+            
+            # Update processing status
+            processing_status[file_id] = {
+                "status": "completed",
+                "message": "PDF processed successfully",
+                "filename": original_filename,
+                "num_chunks": result["num_chunks"]
+            }
+        finally:
+            # Always clean up the temporary file
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+                
     except Exception as e:
         processing_status[file_id] = {"status": "failed", "message": str(e)}
 
@@ -128,10 +156,10 @@ async def chat(request: ChatRequest):
                         yield chunk
                     
                     # Send an explicit completion marker that the frontend will recognize
-                    yield "\n\n__STREAM_COMPLETE__"
+                    yield "__STREAM_COMPLETE__"
                     
                 except Exception as e:
-                    yield f"Error: {str(e)}\n\n__STREAM_COMPLETE__"  # Include completion marker even on error
+                    yield f"Error: {str(e)}__STREAM_COMPLETE__"  # Include completion marker even on error
         else:
             # Use the standard OpenAI chat completion
             from openai import OpenAI
@@ -159,10 +187,10 @@ async def chat(request: ChatRequest):
                             yield chunk.choices[0].delta.content
                     
                     # Send an explicit completion marker that the frontend will recognize
-                    yield "\n\n__STREAM_COMPLETE__"
+                    yield "__STREAM_COMPLETE__"
                     
                 except Exception as e:
-                    yield f"Error: {str(e)}\n\n__STREAM_COMPLETE__"  # Include completion marker even on error
+                    yield f"Error: {str(e)}__STREAM_COMPLETE__"  # Include completion marker even on error
         
         # Return a streaming response to the client with appropriate headers
         return StreamingResponse(
@@ -182,41 +210,36 @@ async def chat(request: ChatRequest):
 @app.post("/api/upload-pdf")
 async def upload_pdf(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     try:
-        # Check if a file with the same name already exists
+        # Get the original filename
         original_filename = file.filename
-        existing_files = os.listdir(UPLOADS_DIR)
         
-        # Check for files with the same name (ignoring the UUID prefix)
-        for existing_file in existing_files:
-            # Extract the original filename from the existing file (remove UUID prefix)
-            if '_' in existing_file and existing_file.split('_', 1)[1] == original_filename:
-                # File already exists, extract the UUID
-                existing_file_id = existing_file.split('_', 1)[0]
+        # Check if a file with the same name already exists in Qdrant
+        from aimakerspace.qdrant_store import QdrantVectorStore
+        vector_store = QdrantVectorStore()
+        existing_pdfs = vector_store.get_all_pdf_metadata()
+        
+        # Check for files with the same name
+        for pdf in existing_pdfs:
+            if pdf.get("filename") == original_filename:
+                # File already exists
+                existing_file_id = pdf.get("file_id")
                 
-                # Check if we have processing status for this file
-                if existing_file_id in processing_status:
-                    status = processing_status[existing_file_id]
-                    if status.get('status') == 'completed':
-                        return {
-                            "file_id": existing_file_id, 
-                            "status": "already_exists", 
-                            "message": f"PDF '{original_filename}' was already uploaded and processed.",
-                            "filename": original_filename,
-                            "num_chunks": status.get('num_chunks', 0)
-                        }
-                
-                # If no status found or not completed, consider it as a new upload
-                # This handles cases where a previous upload might have failed
+                return {
+                    "file_id": existing_file_id, 
+                    "status": "already_exists", 
+                    "message": f"PDF '{original_filename}' was already uploaded and processed.",
+                    "filename": original_filename,
+                    "num_chunks": pdf.get('num_chunks', 0)
+                }
         
         # Generate a unique ID for this upload
         file_id = str(uuid.uuid4())
-        # Save the uploaded file
-        file_path = os.path.join(UPLOADS_DIR, f"{file_id}_{original_filename}")
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
         
-        # Process the PDF in the background
-        background_tasks.add_task(process_pdf_background, file_path, file_id)
+        # Read the file content
+        file_content = await file.read()
+        
+        # Process the PDF in the background using temporary storage
+        background_tasks.add_task(process_pdf_background, file_content, file_id, original_filename)
         
         return {"file_id": file_id, "status": "processing", "message": "PDF upload started"}
     
@@ -245,45 +268,19 @@ async def debug_processing_status():
 @app.get("/api/list-pdfs")
 async def list_pdfs():
     try:
-        print(f"DEBUG: Listing PDFs from directory: {UPLOADS_DIR}")
+        print(f"DEBUG: Listing PDFs from Qdrant Cloud")
         pdf_list = []
         
-        # Check if directory exists
-        if not os.path.exists(UPLOADS_DIR):
-            print(f"DEBUG: Uploads directory does not exist: {UPLOADS_DIR}")
-            return {"pdfs": [], "error": "Uploads directory not found"}
-            
-        # Get all files in the uploads directory
-        files = os.listdir(UPLOADS_DIR)
-        print(f"DEBUG: Found {len(files)} files in uploads directory")
+        # Get PDFs from Qdrant Cloud
+        from aimakerspace.qdrant_store import QdrantVectorStore
+        vector_store = QdrantVectorStore()
+        qdrant_pdfs = vector_store.get_all_pdf_metadata()
         
-        for filename in files:
-            print(f"DEBUG: Processing file: {filename}")
-            if filename.endswith('.pdf'):
-                # Extract the file ID and original filename
-                parts = filename.split('_', 1)
-                if len(parts) == 2:
-                    file_id = parts[0]
-                    original_name = parts[1]
-                    
-                    # Check if we have processing status for this file
-                    status_info = processing_status.get(file_id, {})
-                    status = status_info.get('status', 'unknown')
-                    print(f"DEBUG: File {filename} has status: {status}, info: {status_info}")
-                    
-                    # Include all PDFs, regardless of processing status
-                    # If no status info, assume it's ready to use
-                    pdf_list.append({
-                        "file_id": file_id,
-                        "filename": original_name,
-                        "num_chunks": status_info.get('num_chunks', 0),
-                        "status": status
-                    })
-                    print(f"DEBUG: Added file {filename} to PDF list with status {status}")
-                else:
-                    print(f"DEBUG: Skipping file {filename} because filename format is invalid")
-            else:
-                print(f"DEBUG: Skipping file {filename} because it's not a PDF")
+        if qdrant_pdfs:
+            print(f"DEBUG: Found {len(qdrant_pdfs)} PDFs in Qdrant")
+            pdf_list.extend(qdrant_pdfs)
+        else:
+            print("DEBUG: No PDFs found in Qdrant or error occurred")
         
         # Debug processing_status dictionary
         print(f"DEBUG: Current processing_status: {processing_status}")
@@ -552,11 +549,11 @@ async def rag_stream(request: Request):
                     yield f"data: {chunk}\n\n"
                 
                 # Add completion marker
-                yield "data: \n\n[DONE]\n\n"
+                yield "data: __STREAM_COMPLETE__\n\n"
             except Exception as e:
                 # Return error message in the stream
                 yield f"data: Error: {str(e)}\n\n"
-                yield "data: \n\n[DONE]\n\n"
+                yield "data: __STREAM_COMPLETE__\n\n"
         
         return StreamingResponse(generate(), headers=headers)
     except Exception as e:
