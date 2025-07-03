@@ -169,3 +169,6 @@ node_modules/
 .next/
 
 env.yaml
+
+# Qdrant vector database files
+qdrant_data/

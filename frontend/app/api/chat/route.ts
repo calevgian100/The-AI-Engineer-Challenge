@@ -9,12 +9,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     // Extract required parameters
-    const { user_message, developer_message, model } = body;
+    const { user_message, developer_message, model, use_rag } = body;
     
     // Validate required parameters
     if (!user_message) {
       return NextResponse.json(
-        { error: 'Missing required parameters' },
+        { error: 'User message is required' },
         { status: 400 }
       );
     }
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
         user_message,
         developer_message,
         model,
+        use_rag,
       }),
     });
     
