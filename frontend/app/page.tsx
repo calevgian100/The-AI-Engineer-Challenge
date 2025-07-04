@@ -1,24 +1,37 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { QuestionMarkCircleIcon } from '@heroicons/react/24/outline';
+import { QuestionMarkCircleIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import ChatMessage from './components/ChatMessage';
 import TypingIndicator from './components/TypingIndicator';
 import ChatInput from './components/ChatInput';
 import HelpModal from './components/HelpModal';
 import TrainerSelector from './components/TrainerSelector';
+import PDFUploader from './components/PDFUploader';
+import PDFDropdown from './components/PDFDropdown';
+import PDFListBox from './components/PDFListBox';
+import RAGSources from './components/RAGSources';
 import { formatErrorMessage, parseApiError } from './utils/errorHandling';
 import React from 'react';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  sources?: {
+    text: string;
+    source: string;
+    score: number;
+  }[];
 }
+
+import { Toaster, toast } from 'react-hot-toast';
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [ragEnabled, setRagEnabled] = useState(false);
+  const [uploadedFileId, setUploadedFileId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Base persona that all trainers inherit from
@@ -28,7 +41,7 @@ export default function Home() {
     'Never suggest that the user should "check with their coach" since YOU are their coach. ' +
     'Do not reply with table data as it is hard to format on the chat. ' +
     'Assume the user\'s experience level matches your own unless they specify otherwise. ' +
-    'IMPORTANT: Never include "[DONE]" in your responses as this is an internal marker. ' +
+    'IMPORTANT: Never include "__STREAM_COMPLETE__" in your responses as this is an internal marker. ' +
     'If you need to present tabular data, use proper markdown table format with headers and aligned columns.';
 
   // Trainer personas
@@ -59,14 +72,19 @@ export default function Home() {
   };
   
   // State for current trainer
-  const [currentTrainer, setCurrentTrainer] = useState<keyof typeof trainerPersonas>('standard');
+  const [selectedTrainer, setSelectedTrainer] = useState<keyof typeof trainerPersonas>('standard');
   
   // Get the current developer message based on selected trainer
-  const developerMessage = trainerPersonas[currentTrainer].message;
+  const developerMessage = trainerPersonas[selectedTrainer].message;
   const model = 'gpt-4.1-mini';
 
   // No need to load or save settings anymore as we're using hardcoded values
 
+  // Scroll to top on page load
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+  
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -79,7 +97,7 @@ export default function Home() {
       // Cmd/Ctrl + N for new conversation
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault();
-        handleNewConversation();
+        setMessages([]);
         return;
       }
       
@@ -115,39 +133,63 @@ export default function Home() {
   }, [messages]);
 
   const handleSendMessage = async (userMessage: string) => {
+    if (userMessage.trim() === '') return;
+    
     // Add user message to chat
     setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
     // Set loading state to show thinking animation
     setIsLoading(true);
 
+    // Get the selected trainer persona
+    const developerMessage = selectedTrainer ? trainerPersonas[selectedTrainer].message : basePersona;
+    
+    if (ragEnabled) {
+      console.log('RAG mode enabled, using RAG query endpoint');
+    }
+
     try {
-      const response = await fetch('/api/chat', {
+      // Use different endpoints based on RAG mode
+      const endpoint = ragEnabled ? '/api/rag-stream' : '/api/chat';
+      console.log(`Using endpoint: ${endpoint} with RAG mode: ${ragEnabled}`);
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
+        body: JSON.stringify(ragEnabled ? {
+          // RAG endpoint format
+          query: userMessage,
+          system_prompt: developerMessage,
+          // Make pdf_id optional - if not provided, search across all PDFs
+          ...(uploadedFileId ? { pdf_id: uploadedFileId } : {}),
+        } : {
+          // Chat endpoint format
           user_message: userMessage,
           developer_message: developerMessage,
           model: model,
+          use_rag: false
         }),
       });
 
       if (!response.ok) {
-        const errorMessage = await parseApiError(response);
-        throw new Error(errorMessage);
+        throw new Error(`Error: ${response.status}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('Response body is null');
-
-      // Initialize empty assistant message
+      // Initialize empty assistant message and sources for both modes
       let assistantMessage = '';
+      let messageSources: any[] = [];
       
       // Add an empty assistant message that will be updated with streaming content
-      // Important: This happens before we start reading the stream
-      setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
-
+      setMessages((prev) => {
+        const newMessage: Message = { role: 'assistant', content: '' };
+        return [...prev, newMessage];
+      });
+      
+      // For both RAG and non-RAG mode, handle streaming response
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('Response body is null');
+      
       // Process the stream
       let streamComplete = false;
       while (!streamComplete) {
@@ -160,36 +202,79 @@ export default function Home() {
         }
 
         const text = new TextDecoder().decode(value);
+        console.log('Received chunk:', text.substring(0, 50) + '...');
         
-        // Check for our explicit completion marker
-        if (text.includes('\n\n__STREAM_COMPLETE__')) {
-          console.log('Found explicit completion marker');
-          // Remove the marker from the message
-          assistantMessage += text.replace('\n\n__STREAM_COMPLETE__', '');
-          streamComplete = true;
-        } else if (text.includes('\n\n[DONE]')) {
-          // Handle legacy marker for backward compatibility
-          console.log('Found legacy completion marker');
-          // Remove the marker from the message
-          assistantMessage += text.replace('\n\n[DONE]', '');
-          streamComplete = true;
-        } else {
-          assistantMessage += text;
-        }
-        
-        // Update the last message with the accumulated content
-        setMessages((prev) => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1] = {
-            role: 'assistant',
-            content: assistantMessage,
-          };
-          return newMessages;
-        });
-        
-        // If we found the completion marker, break the loop
-        if (streamComplete) {
-          break;
+        // Handle RAG streaming format (SSE format)
+        if (ragEnabled && text.includes('data:')) {
+          // Split the text by double newlines to get individual SSE messages
+          const events = text.split('\n\n').filter(Boolean);
+          
+          for (const event of events) {
+            // Extract the data part
+            const dataMatch = event.match(/^data: (.+)$/m);
+            if (!dataMatch) continue;
+            
+            const data = dataMatch[1];
+            console.log('Parsed SSE data:', data.substring(0, 50) + '...');
+            
+            // Check if this is a sources message
+            if (data.startsWith('{"sources":')) {
+              try {
+                const sourcesData = JSON.parse(data);
+                messageSources = sourcesData.sources;
+                console.log('Received sources:', messageSources.length);
+                // Log each source to check for duplicates
+                messageSources.forEach((source, index) => {
+                  console.log(`Source ${index}: ${source.source}, Score: ${source.score}, Text: ${source.text.substring(0, 30)}...`);
+                });
+              } catch (e) {
+                console.error('Error parsing sources:', e);
+              }
+            } 
+            // Check for completion marker - be flexible with format
+            else if (data.includes('__STREAM_COMPLETE__')) {
+              console.log('Found completion marker in SSE');
+              streamComplete = true;
+            } 
+            // Regular content
+            else {
+              assistantMessage += data;
+              
+              // Update messages with the current content and sources
+              setMessages((prev) => {
+                const newMessages = [...prev];
+                const lastMessage = newMessages[newMessages.length - 1];
+                newMessages[newMessages.length - 1] = {
+                  ...lastMessage,
+                  content: assistantMessage,
+                  sources: messageSources.length > 0 ? messageSources : undefined
+                };
+                return newMessages;
+              });
+            }
+          }
+        } 
+        // Handle regular streaming (non-RAG mode)
+        else {
+          // Check for completion marker - be flexible with format
+          if (text.includes('__STREAM_COMPLETE__')) {
+            console.log('Found completion marker in stream');
+            // Remove the marker from the message (handle both formats)
+            streamComplete = true;
+          } else {
+            assistantMessage += text;
+          }
+          
+          // Update messages with the completed assistant message
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            const lastMessage = newMessages[newMessages.length - 1];
+            newMessages[newMessages.length - 1] = {
+              ...lastMessage,
+              content: assistantMessage
+            };
+            return newMessages;
+          });
         }
       }
       
@@ -197,7 +282,7 @@ export default function Home() {
       // Important: Set loading to false AFTER the stream is fully processed
       setIsLoading(false);
     } catch (error) {
-      console.error('Error:', error);
+      // Add error message
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: formatErrorMessage(error) },
@@ -205,6 +290,12 @@ export default function Home() {
       // Make sure to set loading to false on error too
       setIsLoading(false);
     }
+  };
+  
+  // Handle PDF upload completion
+  const handlePDFUploadComplete = (fileId: string) => {
+    setUploadedFileId(fileId);
+    setRagEnabled(true);
   };
 
   const handleNewConversation = () => {
@@ -216,10 +307,32 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-primary-950">
+    <div className="flex flex-col h-screen max-h-screen bg-primary-950 overflow-hidden">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: '#1a1a2e',
+            color: '#e2e8f0',
+            border: '1px solid #2d3748'
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#1a1a2e',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#1a1a2e',
+            },
+          },
+        }}
+      />
       {/* Header that appears when messages are present */}
       {messages.length > 0 && (
-        <div className="bg-primary-900 border-b border-primary-800 py-3 px-4 flex flex-col sm:flex-row justify-center items-center relative overflow-hidden gap-4">
+        <div className="bg-primary-900 border-b border-primary-800 py-3 px-4 flex flex-col sm:flex-row justify-between items-center relative overflow-hidden gap-4">
           <div className="absolute inset-0 opacity-10">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-neonGreen to-transparent"></div>
           </div>
@@ -230,12 +343,19 @@ export default function Home() {
             </svg>
             WOD-Wise
           </h1>
-          <div className="relative z-30">
+          <div className="flex items-center space-x-4 relative z-30">
+            {/* Only show PDF Dropdown in header during chat */}
+            {messages.length > 0 && (
+              <PDFDropdown
+                onPDFSelected={handlePDFUploadComplete}
+                currentFileId={uploadedFileId}
+              />
+            )}
             <TrainerSelector 
               trainers={trainerPersonas}
-              currentTrainer={currentTrainer}
+              currentTrainer={selectedTrainer}
               onTrainerChange={(trainerId) => {
-                setCurrentTrainer(trainerId as keyof typeof trainerPersonas);
+                setSelectedTrainer(trainerId as keyof typeof trainerPersonas);
                 // Clear messages when changing trainers
                 if (messages.length > 0) {
                   if (confirm('Changing trainers will start a new conversation. Continue?')) {
@@ -250,52 +370,62 @@ export default function Home() {
 
       <div className="flex-1 overflow-hidden flex flex-col">
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          
+        <div className="w-full max-w-5xl mx-auto flex flex-col h-full">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center flex-grow p-4 text-center">
-                <h1 className="text-4xl font-bold text-neonGreen mb-4">WOD-Wise</h1>
-                <p className="text-xl text-gray-300 mb-6">Your CrossFit Tr-AI-ning Assistant</p>
-                <div className="max-w-md text-gray-400 text-sm mb-6">
-                  <p className="mb-4">Ask me anything about CrossFit workouts, techniques, nutrition, or training plans!</p>
-                </div>
-                <div className="mb-6">
-                  <TrainerSelector 
-                    trainers={trainerPersonas}
-                    currentTrainer={currentTrainer}
-                    onTrainerChange={(trainerId) => {
-                      setCurrentTrainer(trainerId as keyof typeof trainerPersonas);
-                    }}
-                  />
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center min-h-[80vh] pt-8">
+                <div className="text-center space-y-4 max-w-md">
+                  <h1 className="text-4xl font-bold text-neonGreen mb-4">WOD-Wise</h1>
+                  <p className="text-xl text-gray-300 mb-6">Your CrossFit Tr-AI-ning Assistant</p>
+                  <div className="max-w-md text-gray-400 text-sm mb-6">
+                    <p className="mb-4">Ask me anything about CrossFit workouts, techniques, nutrition, or training plans!</p>
+                  </div>
+                  <div className="mb-6">
+                    <TrainerSelector 
+                      trainers={trainerPersonas}
+                      currentTrainer={selectedTrainer}
+                      onTrainerChange={(trainerId) => {
+                        setSelectedTrainer(trainerId as keyof typeof trainerPersonas);
+                      }}
+                    />
+                  </div>
+                  <div className="mt-8 mb-16">
+                    <h2 className="text-xl font-semibold text-neonGreen mb-4">Upload a PDF for RAG</h2>
+                    <div className="flex flex-col gap-6 items-start">
+                      <PDFUploader onUploadComplete={handlePDFUploadComplete} />
+                      <div className="w-full">
+                        <PDFListBox />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
+            ) : (
+              <>
+                {messages.map((message, index) => (
+                  <React.Fragment key={index}>
+                    <ChatMessage role={message.role} content={message.content} />
+                    {message.sources && message.sources.length > 0 && (
+                      <RAGSources sources={message.sources} />
+                    )}
+                  </React.Fragment>
+                ))}
+                {isLoading && <TypingIndicator />}
+              </>
             )}
-            
-            {messages.map((message, index) => (
-              <ChatMessage key={index} role={message.role} content={message.content} />
-            ))}
-            
-            {isLoading && <TypingIndicator />}
-            
             <div ref={messagesEndRef} />
           </div>
-
-          {/* Input Area */}
-          <div className="flex items-center justify-center space-x-3 w-full max-w-6xl mx-auto">
-            <ChatInput 
-              onSendMessage={handleSendMessage} 
-              disabled={isLoading} 
-            />
-            <button
-              onClick={() => setIsHelpModalOpen(true)}
-              className="p-2 rounded-full bg-black text-neonGreen border border-neonGreen hover:bg-primary-800 transition-colors duration-200"
-              title="Help"
-            >
-              <QuestionMarkCircleIcon className="h-5 w-5" />
-            </button>
-          </div>
+          
+          {/* Chat input */}
+          <ChatInput 
+            onSendMessage={handleSendMessage} 
+            disabled={isLoading}
+            isLoading={isLoading}
+            ragEnabled={ragEnabled}
+            onRagToggle={setRagEnabled}
+            hasUploadedPdf={uploadedFileId !== null}
+          />
         </div>
       </div>
 
