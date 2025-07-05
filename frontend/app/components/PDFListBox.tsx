@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
+import { TrashIcon } from '@heroicons/react/24/outline';
 
 interface PDF {
   file_id: string;
@@ -13,6 +14,7 @@ interface PDF {
 const PDFListBox: React.FC = () => {
   const [pdfs, setPdfs] = useState<PDF[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // Only fetch PDFs once when the component mounts
   useEffect(() => {
@@ -20,6 +22,36 @@ const PDFListBox: React.FC = () => {
     fetchPDFs();
     // No auto-refresh interval - only manual refresh via button
   }, []);
+
+  // Function to delete a PDF
+  const handleDeletePDF = async (fileId: string) => {
+    try {
+      setDeleting(fileId);
+      
+      const response = await fetch(`/api/delete-pdf/${fileId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        toast.success('PDF deleted successfully');
+        // Remove the PDF from the local state
+        setPdfs(pdfs.filter(pdf => pdf.file_id !== fileId));
+      } else {
+        toast.error(data.message || 'Failed to delete PDF');
+      }
+    } catch (error) {
+      console.error('Error deleting PDF:', error);
+      toast.error('Failed to delete PDF');
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   const fetchPDFs = async (isRefresh = false) => {
     try {
@@ -100,9 +132,17 @@ const PDFListBox: React.FC = () => {
                     <span className="text-sm text-gray-200 truncate max-w-[280px]">{pdf.filename}</span>
                   </div>
                   <div className="flex items-center flex-shrink-0">
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 mr-3">
                       {pdf.num_chunks && pdf.num_chunks > 0 ? `${pdf.num_chunks} chunks` : ''}
                     </span>
+                    <button
+                      onClick={() => handleDeletePDF(pdf.file_id)}
+                      disabled={deleting === pdf.file_id}
+                      className={`text-gray-400 hover:text-red-500 transition-colors ${deleting === pdf.file_id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      title="Delete PDF"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
                 {pdf.status && pdf.status !== 'completed' && pdf.status === 'processing' && (
