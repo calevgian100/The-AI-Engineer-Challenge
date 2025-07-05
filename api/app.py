@@ -545,6 +545,7 @@ async def rag_stream(request: Request):
                 yield f"data: {sources_json}\n\n"
                 
                 # Then stream the actual response
+                # Use the trainer persona directly from the frontend
                 async for chunk in rag_engine.astream_query(query, system_prompt):
                     yield f"data: {chunk}\n\n"
                 
@@ -561,6 +562,31 @@ async def rag_stream(request: Request):
             status_code=500,
             content={"error": f"Error processing request: {str(e)}"}
         )
+
+# Endpoint to delete a PDF by file_id
+@app.delete("/api/delete-pdf/{file_id}")
+async def delete_pdf(file_id: str):
+    try:
+        print(f"DEBUG: Deleting PDF with file_id: {file_id}")
+        
+        # Delete PDF from Qdrant Cloud
+        from aimakerspace.qdrant_store import QdrantVectorStore
+        vector_store = QdrantVectorStore()
+        success = vector_store.delete_pdf_by_file_id(file_id)
+        
+        # Remove from processing status if present
+        if file_id in processing_status:
+            del processing_status[file_id]
+            print(f"DEBUG: Removed {file_id} from processing_status")
+        
+        if success:
+            return {"success": True, "message": "PDF deleted successfully"}
+        else:
+            return {"success": False, "message": "PDF not found or could not be deleted"}
+    except Exception as e:
+        print(f"Error deleting PDF: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Entry point for running the application directly
 if __name__ == "__main__":

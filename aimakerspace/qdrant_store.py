@@ -141,52 +141,67 @@ class QdrantVectorStore:
         try:
             # Get all points with scroll API
             pdf_files = {}
+            offset = None
             
-            # Use scroll to get all points
-            scroll_result = self.client.scroll(
-                collection_name=self.collection_name,
-                limit=100,  # Fetch in batches
-                with_payload=True,
-                with_vectors=False  # We don't need the vectors
-            )
-            
-            # Process results
-            points = scroll_result[0]
-            
-            # Extract unique PDF files from points
-            for point in points:
-                if point.payload and "metadata" in point.payload:
-                    metadata = point.payload["metadata"]
-                    if "source" in metadata:
-                        filename = metadata["source"]
-                        file_id = None
-                        
-                        # Extract file_id from filename if it follows our naming convention
-                        if '_' in filename:
-                            parts = filename.split('_', 1)
-                            if len(parts) == 2:
-                                file_id = parts[0]
-                        
-                        # If we couldn't extract a file_id, generate one from the filename
-                        if not file_id:
-                            import hashlib
-                            file_id = hashlib.md5(filename.encode()).hexdigest()[:8]
-                        
-                        # Store PDF metadata
-                        if file_id not in pdf_files:
-                            pdf_files[file_id] = {
-                                "file_id": file_id,
-                                "filename": filename.split('_', 1)[-1] if '_' in filename else filename,
-                                "num_chunks": 1,
-                                "status": "completed"  # If it's in Qdrant, it's completed
-                            }
-                        else:
-                            # Increment chunk count
-                            pdf_files[file_id]["num_chunks"] += 1
+            # Use scroll to get all points in batches
+            while True:
+                # Fetch a batch of points
+                scroll_result = self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=100,  # Fetch in batches
+                    with_payload=True,
+                    with_vectors=False,  # We don't need the vectors
+                    offset=offset  # Continue from last batch
+                )
+                
+                # Process results
+                points = scroll_result[0]
+                offset = scroll_result[1]  # Get offset for next batch
+                
+                # If no more points, break the loop
+                if not points:
+                    break
+                
+                # Extract unique PDF files from points
+                for point in points:
+                    if point.payload and "metadata" in point.payload:
+                        metadata = point.payload["metadata"]
+                        if "source" in metadata:
+                            filename = metadata["source"]
+                            file_id = None
+                            
+                            # Extract file_id from filename if it follows our naming convention
+                            if '_' in filename:
+                                parts = filename.split('_', 1)
+                                if len(parts) == 2:
+                                    file_id = parts[0]
+                            
+                            # If we couldn't extract a file_id, generate one from the filename
+                            if not file_id:
+                                import hashlib
+                                file_id = hashlib.md5(filename.encode()).hexdigest()[:8]
+                            
+                            # Store PDF metadata
+                            if file_id not in pdf_files:
+                                pdf_files[file_id] = {
+                                    "file_id": file_id,
+                                    "filename": filename.split('_', 1)[-1] if '_' in filename else filename,
+                                    "num_chunks": 1,
+                                    "status": "completed"  # If it's in Qdrant, it's completed
+                                }
+                            else:
+                                # Increment chunk count
+                                pdf_files[file_id]["num_chunks"] += 1
+                
+                # If we've processed all points (no more offset), break the loop
+                if offset is None:
+                    break
             
             return list(pdf_files.values())
         except Exception as e:
             print(f"Error retrieving PDF metadata: {e}")
+            import traceback
+            traceback.print_exc()
             return []
     
     def similarity_search(self, query: str, k: int = 5) -> List[Dict[str, Any]]:
@@ -277,3 +292,96 @@ class QdrantVectorStore:
             })
         
         return results
+        
+    def delete_pdf_by_file_id(self, file_id: str) -> bool:
+        """Delete all vector points associated with a specific PDF file_id"""
+        try:
+            print(f"Attempting to delete PDF with file_id: {file_id}")
+            point_ids_to_delete = []
+            offset = None
+            total_points_checked = 0
+            
+            # We need to scroll through all points in batches
+            while True:
+                # Get points with scroll API
+                scroll_result = self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=100,  # Fetch in batches
+                    with_payload=True,
+                    with_vectors=False,  # We don't need the vectors
+                    offset=offset  # Continue from last batch
+                )
+                
+                # Process results
+                points = scroll_result[0]
+                total_points_checked += len(points)
+                print(f"Checking batch of {len(points)} points, total checked: {total_points_checked}")
+                
+                # If no more points, break the loop
+                if not points:
+                    break
+                
+                # Get the offset for the next batch
+                offset = scroll_result[1]
+                
+                # Find points that belong to this PDF
+                for point in points:
+                    if point.payload and "metadata" in point.payload:
+                        metadata = point.payload["metadata"]
+                        if "source" in metadata:
+                            filename = metadata["source"]
+                            
+                            # Method 1: Direct file_id match at start of filename
+                            if '_' in filename and filename.startswith(f"{file_id}_"):
+                                point_ids_to_delete.append(point.id)
+                                print(f"Found match by prefix: {filename}")
+                                continue
+                                
+                            # Method 2: Extract file_id using the same logic as in get_all_pdf_metadata
+                            extracted_file_id = None
+                            if '_' in filename:
+                                parts = filename.split('_', 1)
+                                if len(parts) == 2:
+                                    extracted_file_id = parts[0]
+                                    
+                            # If we couldn't extract a file_id, generate one from the filename
+                            if not extracted_file_id:
+                                import hashlib
+                                extracted_file_id = hashlib.md5(filename.encode()).hexdigest()[:8]
+                                
+                            if extracted_file_id == file_id:
+                                point_ids_to_delete.append(point.id)
+                                print(f"Found match by extracted ID: {filename} -> {extracted_file_id}")
+                
+                # If we've processed all points (no more offset), break the loop
+                if offset is None:
+                    break
+            
+            # Delete the points if any were found
+            if point_ids_to_delete:
+                from qdrant_client import models
+                print(f"Deleting {len(point_ids_to_delete)} points for file_id: {file_id}")
+                
+                # Delete in batches of 100 to avoid hitting limits
+                batch_size = 100
+                for i in range(0, len(point_ids_to_delete), batch_size):
+                    batch = point_ids_to_delete[i:i+batch_size]
+                    self.client.delete(
+                        collection_name=self.collection_name,
+                        points_selector=models.PointIdsList(
+                            points=batch
+                        )
+                    )
+                    print(f"Deleted batch {i//batch_size + 1} of {(len(point_ids_to_delete) + batch_size - 1) // batch_size}")
+                
+                print(f"Successfully deleted all {len(point_ids_to_delete)} points for file_id: {file_id}")
+                return True
+            else:
+                print(f"No points found for file_id: {file_id} after checking {total_points_checked} points")
+                return False
+                
+        except Exception as e:
+            print(f"Error deleting PDF: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
