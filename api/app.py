@@ -112,8 +112,13 @@ async def process_pdf_background(file_content: bytes, file_id: str, original_fil
             temp_path = temp_file.name
         
         try:
-            # Process the PDF using the document processor with the original filename
-            result = document_processor.process_pdf(temp_path, custom_filename=original_filename)
+            # Process the PDF using the document processor with the original filename and file_id
+            print(f"Processing PDF with file_id: {file_id}, filename: {original_filename}")
+            result = document_processor.process_pdf(
+                temp_path, 
+                custom_filename=original_filename,
+                custom_file_id=file_id
+            )
             
             # Ensure the filename in the result is the original filename
             result["filename"] = original_filename
@@ -123,6 +128,7 @@ async def process_pdf_background(file_content: bytes, file_id: str, original_fil
                 "status": "completed",
                 "message": "PDF processed successfully",
                 "filename": original_filename,
+                "file_id": file_id,  # Store file_id explicitly
                 "num_chunks": result["num_chunks"]
             }
         finally:
@@ -252,10 +258,31 @@ async def upload_pdf(background_tasks: BackgroundTasks, file: UploadFile = File(
 @app.get("/api/pdf-status/{file_id}")
 async def pdf_status(file_id: str):
     try:
+        # First check if we have the status in our processing dictionary
         if file_id in processing_status:
             return processing_status[file_id]
-        else:
-            return {"status": "not_found", "message": "PDF processing status not found"}
+        
+        # If not found in processing_status, check if it exists in Qdrant
+        # This handles cases where processing completed but status was lost
+        # (e.g., after server restart)
+        from aimakerspace.qdrant_store import QdrantVectorStore
+        vector_store = QdrantVectorStore()
+        existing_pdfs = vector_store.get_all_pdf_metadata()
+        
+        # Check if the file_id exists in Qdrant
+        for pdf in existing_pdfs:
+            if pdf.get("file_id") == file_id:
+                # File exists in Qdrant, so it's been processed successfully
+                return {
+                    "file_id": file_id,
+                    "status": "completed",
+                    "message": "PDF processing complete",
+                    "filename": pdf.get("filename", "Unknown"),
+                    "num_chunks": pdf.get("num_chunks", 0)
+                }
+        
+        # If we get here, the file_id was not found anywhere
+        return {"status": "not_found", "message": "PDF processing status not found"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -268,8 +295,8 @@ async def debug_processing_status():
 @app.get("/api/list-pdfs")
 async def list_pdfs():
     try:
-        print(f"DEBUG: Listing PDFs from Qdrant Cloud")
-        pdf_list = []
+        # Use a dictionary to track PDFs by file_id to prevent duplicates
+        pdf_dict = {}
         
         # Get PDFs from Qdrant Cloud
         from aimakerspace.qdrant_store import QdrantVectorStore
@@ -277,17 +304,37 @@ async def list_pdfs():
         qdrant_pdfs = vector_store.get_all_pdf_metadata()
         
         if qdrant_pdfs:
-            print(f"DEBUG: Found {len(qdrant_pdfs)} PDFs in Qdrant")
-            pdf_list.extend(qdrant_pdfs)
-        else:
-            print("DEBUG: No PDFs found in Qdrant or error occurred")
+            # Ensure all PDFs have the required fields
+            for pdf in qdrant_pdfs:
+                # Make sure each PDF has a file_id
+                file_id = pdf.get("file_id")
+                if not file_id:
+                    continue
+                    
+                # Ensure all PDFs have the required fields with defaults if missing
+                pdf_dict[file_id] = {
+                    "file_id": file_id,
+                    "filename": pdf.get("filename", "Unknown PDF"),
+                    "num_chunks": pdf.get("num_chunks", 0),
+                    "status": "completed"  # If it's in Qdrant, it's completed
+                }
         
-        # Debug processing_status dictionary
-        print(f"DEBUG: Current processing_status: {processing_status}")
+        # Include any PDFs that are currently being processed but not yet in Qdrant
+        for file_id, status_data in processing_status.items():
+            # Only add if not already in our dictionary
+            if file_id not in pdf_dict:
+                pdf_dict[file_id] = {
+                    "file_id": file_id,
+                    "filename": status_data.get("filename", "Processing PDF"),
+                    "status": status_data.get("status", "processing"),
+                    "num_chunks": status_data.get("num_chunks", 0)
+                }
+        
+        # Convert dictionary to list
+        pdf_list = list(pdf_dict.values())
         
         # Sort by filename
-        pdf_list.sort(key=lambda x: x['filename'])
-        print(f"DEBUG: Returning {len(pdf_list)} PDFs")
+        pdf_list.sort(key=lambda x: x.get('filename', ''))
         
         return {"pdfs": pdf_list}
     except Exception as e:
@@ -569,9 +616,27 @@ async def delete_pdf(file_id: str):
     try:
         print(f"DEBUG: Deleting PDF with file_id: {file_id}")
         
-        # Delete PDF from Qdrant Cloud
+        # First check if this PDF exists in our list
         from aimakerspace.qdrant_store import QdrantVectorStore
         vector_store = QdrantVectorStore()
+        
+        # Get all PDFs to check if this one exists
+        all_pdfs = vector_store.get_all_pdf_metadata()
+        pdf_exists = any(pdf.get("file_id") == file_id for pdf in all_pdfs)
+        
+        if not pdf_exists:
+            print(f"DEBUG: PDF with file_id {file_id} not found in metadata list")
+            # Check if it's in processing status
+            if file_id in processing_status:
+                print(f"DEBUG: PDF {file_id} found in processing_status, removing it")
+                del processing_status[file_id]
+                return {"success": True, "message": "PDF removed from processing status"}
+            else:
+                print(f"DEBUG: PDF {file_id} not found anywhere")
+                return {"success": False, "message": "PDF not found in database or processing queue"}
+        
+        # Delete PDF from Qdrant Cloud
+        print(f"DEBUG: Attempting to delete PDF {file_id} from vector store")
         success = vector_store.delete_pdf_by_file_id(file_id)
         
         # Remove from processing status if present
@@ -582,7 +647,9 @@ async def delete_pdf(file_id: str):
         if success:
             return {"success": True, "message": "PDF deleted successfully"}
         else:
-            return {"success": False, "message": "PDF not found or could not be deleted"}
+            # This is strange - we found the PDF in metadata but couldn't delete it
+            print(f"DEBUG: PDF {file_id} found in metadata but deletion failed")
+            return {"success": False, "message": "PDF found but could not be deleted from vector store"}
     except Exception as e:
         print(f"Error deleting PDF: {str(e)}")
         traceback.print_exc()

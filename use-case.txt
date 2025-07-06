@@ -1,0 +1,64 @@
+🔧 Problem Worth Solving
+CrossFit athletes often struggle with recovery, especially when dealing with specific injuries or overuse. 
+Most generic advice doesn’t account for the intensity of WODs or the unique needs of functional fitness athletes. 
+They need fast, reliable, and personalized post-workout guidance that supports long-term performance and 
+injury prevention.
+
+🤖 Potential LLM Solution
+A mobile app that:
+
+Accepts input like today’s WOD, soreness level, or injury status (e.g. “shoulder rehab”, “knee strain”)
+
+Returns LLM-generated recovery protocols (stretching, mobility, contrast therapy, etc.)
+
+Suggests alternate workouts based on injury ("can't squat? Here's an upper-body EMOM")
+
+Optionally tracks trends in injuries and flags overtraining risk
+
+Integrates Firebase for auth, storage, and user logs. Built in Flutter for cross-platform mobile use.
+
+🧍‍♂️ Target Audience
+Intermediate to advanced CrossFit athletes
+
+Coaches who want a reference tool for their athletes
+
+Rehab-minded fitness enthusiasts
+
+📊 Key Metrics
+Daily/weekly active users
+
+Number of recovery protocols generated
+
+% of users who log injuries or feedback
+
+Retention rate (7-day, 30-day)
+
+User-submitted feedback rating on usefulness of suggestions
+
+📂 Data Sources for RAG and Fine-Tuning
+MobilityWOD / The Ready State (blog posts, mobility routines)
+
+Physiopedia and PubMed abstracts (for injury protocols)
+
+Community-generated logs (anonymous, structured data from early users)
+
+YouTube videos of common recovery routines (for indexing or linking)
+
+🚢 Share
+🌐 Online Communities to Share Your Project In
+r/crossfit: Highly engaged community that loves new tools
+
+CrossFit Facebook Groups: Especially regional or niche ones (e.g., “CrossFit Masters 35+”)
+
+X/Twitter: Tag well-known coaches or rehab influencers (e.g., Squat University, WODprep)
+
+Reddit’s r/bodyweightfitness and r/rehabilitation: For broader recovery interest
+
+Instagram & TikTok: Post short demos showing "input → personalized recovery output" flow
+
+⏰ Best Times to Post (User-Local Time)
+Morning (6-9 AM): Pre-WOD scrolling
+
+Evening (7-9 PM): Post-WOD wind-down, high engagement on Reddit and Instagram
+
+Would you like to make any modifications to this direction? If not, I’ll generate a cover image you can use for your project launch.

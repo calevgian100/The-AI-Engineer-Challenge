@@ -112,12 +112,19 @@ const PDFUploader: React.FC<PDFUploaderProps> = ({ onUploadComplete }) => {
     }
   };
   
+  // Track consecutive not_found responses to handle intermittent issues
+  const notFoundCountRef = useRef<number>(0);
+  const MAX_NOT_FOUND_COUNT = 3;
+  
   const startStatusCheck = (fileId: string) => {
     // Clear any existing interval
     if (statusCheckRef.current) {
       clearInterval(statusCheckRef.current);
       console.log('PDFUploader: Cleared existing status check interval');
     }
+    
+    // Reset not found counter
+    notFoundCountRef.current = 0;
     
     console.log(`PDFUploader: Starting status check interval for file ${fileId}`);
     // Set up polling interval
@@ -137,6 +144,53 @@ const PDFUploader: React.FC<PDFUploaderProps> = ({ onUploadComplete }) => {
         }
         
         const data = await response.json();
+        
+        // Handle not_found status specially
+        if (data.status === 'not_found') {
+          console.log(`PDFUploader: Status not found for file ${fileId}, count: ${notFoundCountRef.current + 1}`);
+          notFoundCountRef.current += 1;
+          
+          // If we've seen not_found multiple times, check if the PDF exists in the list
+          if (notFoundCountRef.current >= MAX_NOT_FOUND_COUNT) {
+            console.log(`PDFUploader: Max not_found count reached, checking if PDF exists in list`);
+            try {
+              // Try to get the list of PDFs to see if our file is there
+              const listResponse = await fetch('/api/list-pdfs');
+              if (listResponse.ok) {
+                const pdfs = await listResponse.json();
+                const foundPdf = pdfs.find((pdf: any) => pdf.file_id === fileId);
+                
+                if (foundPdf) {
+                  console.log(`PDFUploader: Found PDF in list, marking as completed`);
+                  // PDF exists in the list, so it's been processed successfully
+                  setUploadStatus({
+                    fileId,
+                    status: 'completed',
+                    message: 'PDF processing complete',
+                    filename: foundPdf.filename,
+                    numChunks: foundPdf.num_chunks,
+                  });
+                  
+                  // Stop polling and notify parent
+                  if (statusCheckRef.current) {
+                    clearInterval(statusCheckRef.current);
+                    statusCheckRef.current = null;
+                  }
+                  onUploadComplete(fileId);
+                  return;
+                }
+              }
+            } catch (listError) {
+              console.error('Error checking PDF list:', listError);
+            }
+          }
+          
+          // Continue polling if we haven't reached max count or PDF wasn't found in list
+          return;
+        }
+        
+        // Reset not found counter for any other status
+        notFoundCountRef.current = 0;
         
         setUploadStatus({
           fileId,

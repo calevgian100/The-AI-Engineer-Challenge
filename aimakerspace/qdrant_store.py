@@ -168,15 +168,29 @@ class QdrantVectorStore:
                         metadata = point.payload["metadata"]
                         if "source" in metadata:
                             filename = metadata["source"]
-                            file_id = None
                             
-                            # Extract file_id from filename if it follows our naming convention
-                            if '_' in filename:
+                            # First, check if file_id is explicitly stored in metadata
+                            file_id = metadata.get("file_id", None)
+                            
+                            # If no explicit file_id, try to extract it from the filename
+                            if not file_id and '_' in filename:
+                                # Check if the first part looks like a UUID
                                 parts = filename.split('_', 1)
                                 if len(parts) == 2:
-                                    file_id = parts[0]
+                                    potential_id = parts[0]
+                                    # Only use as file_id if it looks like a UUID or is alphanumeric
+                                    if ('-' in potential_id and len(potential_id) > 8) or potential_id.isalnum():
+                                        file_id = potential_id
+                                        # Use the part after the first underscore as the display filename
+                                        display_filename = parts[1]
+                                    else:
+                                        display_filename = filename
+                                else:
+                                    display_filename = filename
+                            else:
+                                display_filename = filename
                             
-                            # If we couldn't extract a file_id, generate one from the filename
+                            # If we still don't have a file_id, generate one from the filename
                             if not file_id:
                                 import hashlib
                                 file_id = hashlib.md5(filename.encode()).hexdigest()[:8]
@@ -185,7 +199,7 @@ class QdrantVectorStore:
                             if file_id not in pdf_files:
                                 pdf_files[file_id] = {
                                     "file_id": file_id,
-                                    "filename": filename.split('_', 1)[-1] if '_' in filename else filename,
+                                    "filename": display_filename,
                                     "num_chunks": 1,
                                     "status": "completed"  # If it's in Qdrant, it's completed
                                 }
@@ -328,26 +342,38 @@ class QdrantVectorStore:
                 for point in points:
                     if point.payload and "metadata" in point.payload:
                         metadata = point.payload["metadata"]
+                        
+                        # Method 0: Check if file_id is directly stored in metadata
+                        if "file_id" in metadata and metadata["file_id"] == file_id:
+                            point_ids_to_delete.append(point.id)
+                            print(f"Found match by direct metadata file_id: {metadata.get('source', 'unknown')}")
+                            continue
+                            
                         if "source" in metadata:
                             filename = metadata["source"]
+                            print(f"Checking source: {filename}")
                             
                             # Method 1: Direct file_id match at start of filename
                             if '_' in filename and filename.startswith(f"{file_id}_"):
                                 point_ids_to_delete.append(point.id)
                                 print(f"Found match by prefix: {filename}")
                                 continue
-                                
-                            # Method 2: Extract file_id using the same logic as in get_all_pdf_metadata
+                            
+                            # Method 2: Check if the first part looks like a UUID or matches our file_id
                             extracted_file_id = None
                             if '_' in filename:
                                 parts = filename.split('_', 1)
                                 if len(parts) == 2:
-                                    extracted_file_id = parts[0]
-                                    
+                                    potential_id = parts[0]
+                                    # Only use as file_id if it looks like a UUID or is alphanumeric
+                                    if ('-' in potential_id and len(potential_id) > 8) or potential_id.isalnum():
+                                        extracted_file_id = potential_id
+                            
                             # If we couldn't extract a file_id, generate one from the filename
                             if not extracted_file_id:
                                 import hashlib
                                 extracted_file_id = hashlib.md5(filename.encode()).hexdigest()[:8]
+                                print(f"Generated hash ID for {filename}: {extracted_file_id}")
                                 
                             if extracted_file_id == file_id:
                                 point_ids_to_delete.append(point.id)
